@@ -1,0 +1,331 @@
+---
+title: ''
+output:
+  html_document:
+    theme: spacelab
+    css: tk_custom.css 
+---
+<a id="top"></a>
+<img src='figs/TomKat_TKREF-trans.png' alt="TomKat logo" style="width: 150px;"/>
+[<img src='figs/PB_logo_RGB_Full_Color_cs.png' alt="Point Blue logo" style="width: 200px;"/>](http://www.pointblue.org)
+
+
+
+TomKat Ranch: Vegetation
+===============================
+Point Blue Conservation Science has surveyed grassland vegetation across TomKat Ranch each summer since 2011. We examined patterns in the [current distribution of vegetation](#distribution) across the ranch, [pasture-specific changes](#diff) in vegetation since 2012, and [ranch-wide vegetation trends](#trends). [Explore data](#table).
+
+```{r data, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## master veg data
+dat = read.csv('data/TK_veg_master.csv')
+dat$cover = round(dat$cover, digits=1)
+
+## ranch polygon
+tkranch = rgdal::readOGR('GIS', 'TomKat_ranch_boundary', verbose=F)
+tkranch = sp::spTransform(tkranch, CRS = sp::CRS('+proj=longlat'))
+
+## pasture polygons
+pasture = rgdal::readOGR('GIS','TK_Veg_Fields2012_kd_edit', verbose=F)
+pasture = sp::spTransform(pasture, CRS = sp::CRS('+proj=longlat'))
+pasture$Pasture = toupper(pasture$Pasture)
+```
+</br>
+
+<a id='distribution'></a>
+
+### 2016 Vegetation Distribution 
+
+<b>Perennial grasses</b> are more common on the west side of the ranch, while <b>invasive weeds</b> are more prevalent on the central and eastern parts of the ranch.
+</br></br>
+<i>Choose a vegetation type at bottom left. Click on any of the pastures to learn more.</i>
+
+```{r cover, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----MAP: most recent veg survey data----
+## subset to most recent year of data
+dat2 = subset(dat, dat$Year==max(dat$Year))
+
+## create HTML-formatted labels showing real % cover data
+## This looks like:
+##      Pasture 2 (bold)
+##      All Grasses: 20%
+dat2$label = paste0('<b>Pasture ', dat2$Pasture, '</b></br>', dat2$vegtype,': ', dat2$cover, '%')
+## (for pastures with no data recorded, replace "NA%")
+dat2$label[is.na(dat2$cover)] = gsub('NA%', 'No data', dat2$label[is.na(dat2$cover)])
+dat2$label[which(dat2$cover==0.5)] = gsub('0.5%', '<1%', dat2$label[which(dat2$cover==0.5)])
+
+## Match veg data to pasture polygons
+perennialgr = pasture
+perennialgr@data = merge(perennialgr@data, dat2[dat2$vegtype=='Perennial Grasses', c('Pasture','cover','label')], by='Pasture', all.x=T, sort=F)
+nativegr = pasture
+nativegr@data = merge(nativegr@data, dat2[dat2$vegtype=='Native Grasses', c('Pasture','cover','label')], by='Pasture', all.x=T, sort=F)
+annualgr = pasture
+annualgr@data = merge(annualgr@data, dat2[dat2$vegtype=='Annual Grasses', c('Pasture','cover','label')], by='Pasture', all.x=T, sort=F)
+allgr = pasture
+allgr@data = merge(allgr@data, dat2[dat2$vegtype=='All Grasses', c('Pasture','cover','label')], by='Pasture', all.x=T, sort=F)
+
+trees = pasture
+trees@data = merge(trees@data, dat2[dat2$vegtype=='Trees', c('Pasture','cover','label')], by='Pasture', all.x=T, sort=F)
+shrubs = pasture
+shrubs@data = merge(shrubs@data, dat2[dat2$vegtype=='Shrubs', c('Pasture','cover','label')], by='Pasture', all.x=T, sort=F)
+forbs = pasture
+forbs@data = merge(forbs@data, dat2[dat2$vegtype=='Forbs', c('Pasture','cover','label')], by='Pasture', all.x=T, sort=F)
+weeds = pasture
+weeds@data = merge(weeds@data, dat2[dat2$vegtype=='Invasive Weeds', c('Pasture','cover','label')], by='Pasture', all.x=T, sort=F)
+bare = pasture
+bare@data = merge(bare@data, dat2[dat2$vegtype=='Bare Ground', c('Pasture','cover','label')], by='Pasture', all.x=T, sort=F)
+
+library(leaflet)
+## Define color palette for % cover data, grouped into bins: <1%, 1-5%, 5-10%, 10-20%, and >20%
+## This one goes from white to Point Blue's dark blue, with dark gray as the NA color
+pointblue.palette = c('#4495d1', '#74b743', '#f7941d', '#005baa', '#bfd730', '#a7a9ac', '#666666')
+pal = colorBin(palette=colorRamp(colors=c('#ffffff', pointblue.palette[4])), 
+                domain=c(0,100), bins=c(0,1,5,10,20,50,100), na.color=pointblue.palette[6])
+
+## Set up map with background tiles, NDVI layer, and an outline of the ranch boundary
+leaflet(height=500) %>% setView(lng=-122.3598, lat=37.26693, zoom=14) %>%
+  addProviderTiles("Stamen.Terrain", options = providerTileOptions(minzoom=14, maxzoom=15)) %>% 
+  addPolygons(data=tkranch, color='black', fill=F, weight=2.5) %>%
+  addPolygons(data = perennialgr, color='black', fillOpacity=1, weight=1.5, fillColor=~pal(cover), 
+              group='Perennial Grasses', popup=~label) %>%
+  addPolygons(data = nativegr, color='black', fillOpacity=1, weight=1.5, fillColor=~pal(cover), 
+              group='Native Grasses', popup=~label) %>%
+  addPolygons(data = annualgr, color='black', fillOpacity=1, weight=1.5, fillColor=~pal(cover), 
+              group='Annual Grasses', popup=~label) %>%
+  addPolygons(data = allgr, color='black', fillOpacity=1, weight=1.5, fillColor=~pal(cover), 
+              group='All Grasses', popup=~label) %>%
+  # addPolygons(data = trees, color='black', fillOpacity=1, weight=1.5, fillColor=~pal(cover), 
+  #             group='Trees', popup=~label) %>%  ## drop trees for now
+  addPolygons(data = shrubs, color='black', fillOpacity=1, weight=1.5, fillColor=~pal(cover), 
+              group='Shrubs', popup=~label) %>%
+  addPolygons(data = forbs, color='black', fillOpacity=1, weight=1.5, fillColor=~pal(cover), 
+              group='Forbs', popup=~label) %>%
+  addPolygons(data = weeds, color='black', fillOpacity=1, weight=1.5, fillColor=~pal(cover),
+              group='Invasive Weeds', popup=~label) %>%
+  addPolygons(data = bare, color='black', fillOpacity=1, weight=1.5, fillColor=~pal(cover), 
+              group='Bare Ground', popup=~label) %>%
+  addLegend(position='topright', pal=pal, values=dat$cover, opacity=1, title='% Cover',
+            labFormat = labelFormat(suffix='%'), na.label='No data') %>%
+  addLayersControl(baseGroups = c('Perennial Grasses', 'Native Grasses', 'Annual Grasses', 
+                                  'All Grasses', 'Shrubs', 'Forbs', 'Invasive Weeds',
+                                  'Bare Ground'), ## drop trees for now
+                   options = layersControlOptions(collapsed=F), position='bottomleft')
+
+```
+
+</br>
+[Back to top](#top)
+
+
+</br></br>
+<a id='diff'></a>
+
+### Pasture-specific changes, 2012-2016  
+Pasture-specific changes in vegetation cover may reflect the interaction between weather, local soil conditions, and pasture-specific management decisions. 
+</br></br>
+<i>Choose a vegetation type at bottom left. Click on any of the pastures to learn more.</i>
+
+```{r net, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----MAP: change in veg cover since 2012----
+dat$cover2 = format(dat$cover, nsmall=1)
+change = reshape2::dcast(dat, Pasture+vegtype~Year, value.var='cover2')
+change$net = as.numeric(change$'2016')-as.numeric(change$'2012')
+change$net = format(change$net, nsmall=1)
+
+## Create HTML-formatted labels showing % cover in each year
+change$label = paste0('<b>Pasture ', change$Pasture,'</b></br>', 
+                      change$vegtype,'</br>',
+                      '<table><tr><td>2012:</td><td align="right">', change$'2012','%</td></tr>',
+                      '<tr><td>2013:</td><td align="right">', change$'2013','%</td></tr>',
+                      '<tr><td>2014:</td><td align="right">', change$'2014','%</td></tr>',
+                      '<tr><td>2016:</td><td align="right">', change$'2016','%</td></tr>',
+                      '<tr><td>Net change:</td><td align="right">', change$net,'%</td></tr></table')
+
+## change format back to numeric
+change[,3:8] = apply(change[,3:8], 2, function(x) as.numeric(x))
+
+## add a "+" sign in front of positive changes:
+change$label[which(change$net>0)] = gsub('Net change:</td><td align="right"> ', 'Net change:</td><td align="right">+', 
+                                         change$label[which(change$net>0)])
+## change NA% to No data
+change$label = gsub('NA%', 'No data', change$label)
+
+## Match veg data to pasture polygons
+perennialgr = pasture
+perennialgr@data = merge(perennialgr@data, change[change$vegtype=='Perennial Grasses', c('Pasture','net','label')], by='Pasture', all.x=T, sort=F)
+nativegr = pasture
+nativegr@data = merge(nativegr@data, change[change$vegtype=='Native Grasses', c('Pasture','net','label')], by='Pasture', all.x=T, sort=F)
+annualgr = pasture
+annualgr@data = merge(annualgr@data, change[change$vegtype=='Annual Grasses', c('Pasture','net','label')], by='Pasture', all.x=T, sort=F)
+allgr = pasture
+allgr@data = merge(allgr@data, change[change$vegtype=='All Grasses', c('Pasture','net','label')], by='Pasture', all.x=T, sort=F)
+
+trees = pasture
+trees@data = merge(trees@data, change[change$vegtype=='Trees', c('Pasture','net','label')], by='Pasture', all.x=T, sort=F)
+shrubs = pasture
+shrubs@data = merge(shrubs@data, change[change$vegtype=='Shrubs', c('Pasture','net','label')], by='Pasture', all.x=T, sort=F)
+forbs = pasture
+forbs@data = merge(forbs@data, change[change$vegtype=='Forbs', c('Pasture','net','label')], by='Pasture', all.x=T, sort=F)
+weeds = pasture
+weeds@data = merge(weeds@data, change[change$vegtype=='Invasive Weeds', c('Pasture','net','label')], by='Pasture', all.x=T, sort=F)
+bare = pasture
+bare@data = merge(bare@data, change[change$vegtype=='Bare Ground', c('Pasture','net','label')], by='Pasture', all.x=T, sort=F)
+
+## Define color palette for % cover data, grouped into bins: <1%, 1-5%, 5-20%, and >20%
+pal2 = colorBin(palette=colorRamp(colors=c(pointblue.palette[3],'#ffffff',pointblue.palette[4])), 
+                domain=c(-100,100), bins=c(-100,-50,-20,-10,-5,5,10,20,50,100), na.color=pointblue.palette[6])
+
+## As before, set up map with background tiles and an outline of the ranch boundary,
+##  then add layers for each veg type, defining group and popups
+leaflet(height=500) %>% setView(lng=-122.3598, lat=37.26693, zoom=14) %>%
+  addProviderTiles("Stamen.Terrain") %>% 
+  addPolygons(data=tkranch, color='black', fill=F, weight=2.5) %>%
+  addPolygons(data = perennialgr, color='black', fillOpacity=1, weight=1.5, fillColor=~pal2(net), 
+              group='Perennial Grasses', popup=~label) %>%
+  addPolygons(data = nativegr, color='black', fillOpacity=1, weight=1.5, fillColor=~pal2(net), 
+              group='Native Grasses', popup=~label) %>%
+  addPolygons(data = annualgr, color='black', fillOpacity=1, weight=1.5, fillColor=~pal2(net), 
+              group='Annual Grasses', popup=~label) %>%
+  addPolygons(data = allgr, color='black', fillOpacity=1, weight=1.5, fillColor=~pal2(net), 
+              group='All Grasses', popup=~label) %>%
+  # addPolygons(data = trees, color='black', fillOpacity=1, weight=1.5, fillColor=~pal2(net), 
+  #             group='Trees', popup=~label) %>% ## drop trees for now
+  addPolygons(data = shrubs, color='black', fillOpacity=1, weight=1.5, fillColor=~pal2(net), 
+              group='Shrubs', popup=~label) %>%
+  addPolygons(data = forbs, color='black', fillOpacity=1, weight=1.5, fillColor=~pal2(net), 
+              group='Forbs', popup=~label) %>%
+  addPolygons(data = weeds, color='black', fillOpacity=1, weight=1.5, fillColor=~pal2(net),
+              group='Invasive Weeds', popup=~label) %>%
+  addPolygons(data = bare, color='black', fillOpacity=1, weight=1.5, fillColor=~pal2(net), 
+              group='Bare Ground', popup=~label) %>%
+  addLegend(position='topright', pal=pal2, values=dat$net, opacity=1, title='% Cover</br>Net change',
+            labFormat = labelFormat(suffix='%'), na.label='No data') %>%
+  addLayersControl(baseGroups = c('Perennial Grasses', 'Native Grasses', 'Annual Grasses', 
+                                  'All Grasses', 'Shrubs', 'Forbs', 'Invasive Weeds',
+                                  'Bare Ground'), 
+                   options = layersControlOptions(collapsed=F), position='bottomleft')
+```
+</br>
+[Back to top](#top)
+
+
+</br></br>
+<a id='trends'></a>
+
+### Ranch-wide vegetation trends, 2012-2016
+  
+We estimated the annual ranch-wide % cover of each vegetation type from the estimated % cover of each pasture and the area of each pasture. Since 2012, <font color='`r pointblue.palette[1]`'><b>total grass cover</b></font> has remained fairly steady at about 40%, and is the dominant vegetation type. However, we have detected slight increases in <font color='`r pointblue.palette[2]`'><b>shrubs</b></font> and <font color='`r pointblue.palette[4]`'><b>bare ground</b></font> and a decline in <font color='`r pointblue.palette[3]`'><b>forbs</b></font>.
+```{r trend, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----FIGURE: ranch-wide trend in %cover----
+## Have to account for different sizes of each pasture and total area of pastures 
+## surveyed each year (accounting for some missing data).
+
+dat = merge(dat, pasture@data, by='Pasture', all.x=T, sort=F)
+dat$cover.area = (dat$cover/100) * dat$area_ha ## % cover * pasture size
+
+## total area surveyed each year & total % cover of each veg type
+total = plyr::ddply(dat, plyr::.(Year, vegtype), plyr::summarize,
+              area.ha = sum(area_ha[!is.na(cover)]), #total area surveyed each year
+              cover.area = sum(cover.area, na.rm=T)) #total area with that veg type
+total$cover.total = total$cover.area/total$area.ha*100 #total % cover (of area surveyed)
+total$vegtype = factor(total$vegtype, levels=c('All Grasses', 'Annual Grasses','Perennial Grasses', 
+                                               'Native Grasses', 'Trees', 'Shrubs', 'Forbs',
+                                               'Bare Ground','Invasive Weeds'))
+total = total[total$Year>=2012,]
+total = plyr::rename(total, c('cover.total'='Cover'))
+
+## Plot vegtypes in groups of three (allows including a take-home message above each one)
+library(ggplot2)
+theme_custom = theme_classic() +
+  theme(legend.title=element_blank(), legend.position=c(1,1), legend.justification=c(1,1),
+        legend.text=element_text(size=10), axis.text=element_text(size=12), 
+        axis.title=element_text(size=12, vjust=1, face='plain'),
+        axis.line.y = element_line(color="black"), axis.line.x = element_line(color="black"))
+
+p1 = ggplot(total[which(total$vegtype %in% c('All Grasses','Shrubs','Forbs','Bare Ground','Invasive Weeds')),], 
+            aes(x=Year, y=Cover, color=vegtype)) + geom_line() + geom_point(pch=19) +
+  ylab('% Cover') + xlab(NULL) + ylim(0,80) + theme_custom + scale_color_manual(values=pointblue.palette[c(1:4,6)])
+plotly::ggplotly(p1) %>% plotly::layout(legend = list(x = 0, y = 1, tracegroupgap=5))
+
+```
+</br>
+[Back to top](#top)
+</br></br></br>  
+
+#### Grasses  
+
+Between 2014-2016 there may have been an increase in <font color='`r pointblue.palette[1]`'><b>annual grasses</b></font> and a slight decline in <font color='`r pointblue.palette[2]`'><b>perennial</b></font> and <font color='`r pointblue.palette[3]`'><b>native grasses</b></font>.
+```{r trend 1, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+p2 = ggplot(total[which(total$vegtype %in% c('Native Grasses', 'Perennial Grasses', 'Annual Grasses')),], 
+            aes(x=Year, y=Cover, color=vegtype)) + geom_line() + geom_point(pch=19) + 
+  ylab('% Cover') + xlab(NULL) + ylim(0,80) + theme_custom + scale_color_manual(values=pointblue.palette[1:4])
+plotly::ggplotly(p2) %>% plotly::layout(legend = list(x = 0, y = 1, tracegroupgap=5))
+```
+</br>
+[Back to top](#top)
+</br></br></br>  
+
+
+### Glossary
+
+**Perennial grasses:** Grasses that can survive for many years, whereas annual grasses germinate from seed, reproduce, and die each year. Perennial grasses generally turn green sooner, stay green longer, produce more biomass, and are more drought-tolerant than annual grasses. Their deep roots stabilize soil, improve water infiltration, and recycle nutrients. 
+
+**Native grasses:** California native grasses are perennials, which have been largely displaced by exotic annual grasses.
+
+**Forbs:** Herbaceous flowering plants that are not grasses, sedges or rushes.
+
+[Back to top](#top)
+
+
+</br></br>
+<a id='table'></a>
+
+### Vegetation data summary  
+</br>
+<i>Sort by any column to find pastures with the highest or lowest % cover of any vegetation type, or click in the box at the bottom of each column to filter results.</i>
+
+```{r datatable, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+##----SHOW INTERACTIVE DATA TABLE----
+## Table will be sortable by any column, so make sure Pasture numbers get sorted correctly.
+dat$pasturenum = dat$Pasture
+dat$pasturenum = as.numeric(gsub('A|B','',dat$pasturenum)) #drop a/b designations for sorting
+dat = dat[order(dat$pasturenum, dat$Pasture, dat$Year, dat$vegtype),]
+dat$Pasture = factor(dat$Pasture, levels=unique(dat$Pasture))
+dat$cover = round(dat$cover, digits=0)
+
+show = reshape2::dcast(dat, Pasture+Year~vegtype, value.var='cover', fill=NA)
+show = show[, match(c('Pasture', 'Year', 'Native Grasses', 'Perennial Grasses', 'Annual Grasses', 
+                      'All Grasses', 'Shrubs', 'Forbs', 'Invasive Weeds', 'Bare Ground'),
+                    colnames(show))]
+
+DT::datatable(show, rownames=F, escape=F, filter='bottom',
+          colnames = c('Pasture', 'Year', 'Native<br>Grasses', 'Perennial<br>Grasses', 'Annual<br>Grasses', 
+                      'All<br>Grasses', 'Shrubs', 'Forbs', 'Invasive<br>Weeds', 'Bare<br>Ground'),
+          options=list(
+            autoWidth=F,
+            columnDefs = list(list(className = 'dt-center', targets = c(0:9))),
+            dom = 'T<"clear">lrtip'
+          )) 
+```
+</br>
+[Back to top](#top)
+
+
+
+-------------
+### About this page
+
+This interactive web page was produced using [RStudio](https://www.rstudio.com) with the packages [leaflet](http://rstudio.github.io/leaflet/) for mapping, [plotly](https://plot.ly/ggplot2/) for graphs, and [DT](https://rstudio.github.io/DT/) for data tables. RStudio is a free and open-source software for programming in [R](https://www.R-project.org/), a programming language for statistical computing and graphics. The code used to produce this web page is available online: XXX.
+
+
+### For more information
+
+Please contact:  
+[Nat Seavy, Ph.D.](mailto:nseavy@pointblue.org)  
+Research Director  
+Pacific Coast and Central Valley Group  
+Point Blue Conservation Science  
+
+
+</br>
+[Back to top](#top)
+</br></br>

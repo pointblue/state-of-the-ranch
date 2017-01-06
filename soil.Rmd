@@ -1,0 +1,294 @@
+---
+title: ''
+output:
+  html_document:
+    theme: spacelab
+    css: tk_custom.css 
+---
+<a id="top"></a>
+<img src='figs/TomKat_TKREF-trans.png' alt="TomKat logo" style="width: 150px;"/>
+[<img src='figs/PB_logo_RGB_Full_Color_cs.png' alt="Point Blue logo" style="width: 200px;"/>](http://www.pointblue.org)
+
+
+TomKat Ranch: Soils
+===============================
+```{r data, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----CALCULATE PERCENTILE SCORES----
+dat = read.csv('data/TK_soil_master.csv',header=T)
+nsites = length(unique(dat$Point))
+
+## bulk density (reverse scores so lower density gets a higher score)
+f = ecdf(max(dat$bulk.dens.gcm3, na.rm=T)-dat$bulk.dens.gcm3)
+dat$bulk.dens.perc = f(max(dat$bulk.dens.gcm3, na.rm=T)-dat$bulk.dens.gcm3)
+
+## water infiltration (reverse scores so lower infiltration time gets a higher score)
+f = ecdf(max(dat$water.infil) - dat$water.infil)
+dat$water.infil.perc = f(max(dat$water.infil) - dat$water.infil)
+
+## % carbon (0-10cm)
+f = ecdf(dat$carbonA)
+dat$carbonA.perc = f(dat$carbonA)
+
+## % carbon (10-40cm)
+f = ecdf(dat$carbonB)
+dat$carbonB.perc = f(dat$carbonB)
+## Note: can always plot percentile scores against original values to visualize relationship
+
+dat$mean.perc = apply(dat[,c('bulk.dens.perc','water.infil.perc','carbonA.perc','carbonB.perc')], 1, mean, na.rm=T)
+dat = dat[order(-dat$mean.perc),]
+dat$rank = c(1:nrow(dat))
+
+## Calcium
+f = ecdf(dat$Calcium)
+dat$Ca.perc = f(dat$Calcium)
+
+## Magnesium
+f = ecdf(dat$Magnesium)
+dat$Mg.perc = f(dat$Magnesium)
+
+## Potassium
+f = ecdf(dat$Potassium)
+dat$K.perc = f(dat$Potassium)
+
+## Sodium
+## temporarily deal with non-numeric values
+dat$Sodium = as.numeric(as.character(plyr::revalue(dat$Sodium, c('< 0.090'='0.05'))))
+f = ecdf(dat$Sodium)
+dat$Na.perc = f(dat$Sodium)
+dat$Sodium = as.factor(dat$Sodium)
+dat$Sodium = plyr::revalue(dat$Sodium, c('0.05'='< 0.090'))
+
+## Nitrogen
+dat$Total.Nitrogen[dat$Total.Nitrogen=='QNS'] = NA #not sure what this means?
+f = ecdf(dat$Total.Nitrogen)
+dat$N.perc = f(dat$Total.Nitrogen)
+
+## pH
+f = ecdf(dat$pH)
+dat$pH.perc = f(dat$pH)
+
+## retain original dat
+dat.orig = dat
+
+pointblue.palette = c('#4495d1', '#74b743', '#f7941d', '#005baa', '#bfd730', '#a7a9ac', '#666666')
+
+```
+
+In 2015 and 2016, Point Blue Conservation Science sampled soil at <font size=4><b>`r nsites` sites</b></font> across TomKat Ranch to evaluate soil productivity and nutrient concentrations. 
+
+
+### Soil productivity indicators
+
+We measured 3 indicators of soil productivity and water holding capacity, [organic carbon content](#carbon), [soil bulk density](#density), and [water infiltration rates](#infiltration), as well as an [overall score](#overall). Sites with relatively <b><font color='`r pointblue.palette[2]`'>high scores</font></b> in all 3 indicators may be the most productive while sites with relatively <b><font color='`r pointblue.palette[3]`'>low scores</font></b> may be good candidates for management actions designed to improve soil productivity. [Explore data](#table).
+</br></br>
+<i>Choose a metric at bottom left. Click on any of the survey points to learn more.</i>
+</br>
+```{r productivity, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----MAP: soil data at sampling points----
+## create HTML table for popups, giving actual data
+dat$title = paste0('<b>', dat$Point, '</b></br>')
+dat$table.header = '<tr><td></td><td align="right">Mean</td></td><td align="right">Percentile</td><td align="right"></tr>'
+dat$table.row1 = paste0('<tr><td>Bulk Density (g/cm<sup>3</sup>):</td><td align="right">',  
+                            format(round(dat$bulk.dens.gcm3,digits=2),nsmall=2),'</td><td align="right">',
+                            round(dat$bulk.dens.perc*100, digits=0),'</td></tr>')
+dat$table.row2 = paste0('<tr><td>Water Infiltration (min/in):</td><td align="right">',
+                            format(round(dat$water.infil,digits=2),nsmall=2),'</td><td align="right">',
+                            round(dat$water.infil.perc*100, digits=0),'</td></tr>')
+dat$table.row3 = paste0('<tr><td>% Carbon (0-10 cm):</td><td align="right">',
+                            format(round(dat$carbonA, digits=1),nsmall=1),'</td><td align="right">',
+                            round(dat$carbonA.perc*100, digits=0),'</td></tr>')
+dat$table.row4 = paste0('<tr><td>% Carbon (10-40 cm):</td><td align="right">',
+                            format(round(dat$carbonB, digits=1),nsmall=1),'</td><td align="right">',
+                            round(dat$carbonB.perc*100, digits=0),'</td></tr>')
+dat$table.row5 = paste0('<tr><td>Overall score:</td><td align="right"></td><td align="right">',
+                            round(dat$mean.perc*100, digits=0),'</td></tr>')
+dat$labelall = paste0(dat$title, '<table width=225>', dat$table.header, dat$table.row1, 
+                       dat$table.row2, dat$table.row3, dat$table.row4, dat$table.row5, '</table>')
+dat$labelbd = paste0(dat$title, '<table width=225>', dat$table.header, dat$table.row1, '</table>')
+dat$labelinf = paste0(dat$title, '<table width=225>', dat$table.header, dat$table.row2, '</table>')
+dat$labelcarbA = paste0(dat$title, '<table width=225>', dat$table.header, dat$table.row3, '</table>')
+dat$labelcarbB = paste0(dat$title, '<table width=225>', dat$table.header, dat$table.row4, '</table>')
+
+## match soil data to point count coordinates
+coords = rgdal::readOGR('GIS', 'TOKA_point_count_grid', verbose=F) #NAD83 UTM Zone 10N
+coords = coords[which(coords$Name %in% dat$Point),] #drop points that were never surveyed
+coords@data = merge(coords@data, dat, by.x='Name', by.y='Point', sort=F)
+coords = sp::spTransform(coords, CRS = sp::CRS('+proj=longlat'))
+
+## ranch polygon
+tkranch = rgdal::readOGR('GIS', 'TomKat_ranch_boundary', verbose=F)
+tkranch = sp::spTransform(tkranch, CRS = sp::CRS('+proj=longlat'))
+
+## pasture polygons
+pasture = rgdal::readOGR('GIS','TK_Veg_Fields2012_kd_edit', verbose=F)
+pasture = sp::spTransform(pasture, CRS = sp::CRS('+proj=longlat'))
+
+library(leaflet)
+
+## set color code for groups
+pal = colorBin(pointblue.palette[c(3,1,2)], bins = c(0, 0.333, 0.667, 1), domain = c(0, 1),
+               na.color=pointblue.palette[6])
+
+leaflet(height=500) %>% setView(lng=-122.3598, lat=37.26693, zoom=14) %>%
+  addProviderTiles("Stamen.Terrain", group='Terrain') %>% 
+  addPolygons(data=pasture, color='black', fillColor=pointblue.palette[6], fillOpacity=0.5, weight=1) %>%
+  addPolygons(data=tkranch, color='black', fill=F, weight=2.5) %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', fillColor=~pal(mean.perc),
+                   popup=~labelall, group='Overall score') %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', fillColor=~pal(bulk.dens.perc),
+                   popup=~labelbd, group='Bulk density') %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', fillColor=~pal(water.infil.perc),
+                   popup=~labelinf, group='Water infiltration') %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', fillColor=~pal(carbonA.perc),
+                   popup=~labelcarbA, group='% Carbon (0-10 cm)') %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', fillColor=~pal(carbonB.perc),
+                   popup=~labelcarbB, group='% Carbon (10-40 cm)') %>%
+  addLegend(position='topright', title='Soil Metric', colors=pointblue.palette[c(2,1,3,6)], 
+            labels=c('High (>66th percentile)','Moderate (33rd-66th percentile)','Low (<33rd percentile)','No data'), opacity=1) %>%
+  addLayersControl(position='bottomleft', options=layersControlOptions(collapsed = F),
+                   baseGroups=c('Overall score','Bulk density','Water infiltration','% Carbon (0-10 cm)','% Carbon (10-40 cm)'))
+
+
+```
+</br>
+[Back to top](#top)
+</br></br>
+
+
+### Soil nutrient concentrations
+
+We also measured the concentrations of several nutrients in the soil and the soil pH in the top 10 cm.
+
+```{r nutrients, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----MAP: soil nutrient data at sampling points----
+dat2 = dat.orig
+
+## create HTML table for popups, giving actual data
+dat2$title = paste0('<b>', dat2$Point, '</b></br>')
+dat2$table.header = '<tr><td></td><td align="right">Concentration (%)</td></td><td align="right">Percentile</td><td align="right"></tr>'
+dat2$table.row1 = paste0('<tr><td>Ca:</td><td align="right">',  
+                         dat2$Calcium,'</td><td align="right">',
+                         round(dat2$Ca.perc*100, digits=0),'</td></tr>')
+dat2$table.row2 = paste0('<tr><td>Mg:</td><td align="right">',
+                         dat2$Magnesium,'</td><td align="right">',
+                         round(dat2$Mg.perc*100, digits=0),'</td></tr>')
+dat2$table.row3 = paste0('<tr><td>K:</td><td align="right">',
+                         dat2$Potassium,'</td><td align="right">',
+                         round(dat2$K.perc*100, digits=0),'</td></tr>')
+dat2$table.row4 = paste0('<tr><td>Na:</td><td align="right">',
+                         dat2$Sodium,'</td><td align="right">',
+                         round(dat2$Na.perc*100, digits=0),'</td></tr>')
+dat2$table.row5 = paste0('<tr><td>N:</td><td align="right">',
+                         dat2$Total.Nitrogen,'</td><td align="right">',
+                         round(dat2$N.perc*100, digits=0),'</td></tr>')
+dat2$table.row6 = paste0('<tr><td>pH:</td><td align="right">',
+                         dat2$pH,'</td><td align="right">',
+                         round(dat2$pH.perc*100, digits=0),'</td></tr>')
+
+dat2$labelCa = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row1, '</table>')
+dat2$labelMg = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row2, '</table>')
+dat2$labelK = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row3, '</table>')
+dat2$labelNa = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row4, '</table>')
+dat2$labelN = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row5, '</table>')
+dat2$labelpH = paste0(dat2$title, '<table>', '<tr><td></td><td align="right">Value</td></td><td align="right">Percentile</td><td align="right"></tr>', dat2$table.row6, '</table>')
+
+## match soil data to point count coordinates
+coords = rgdal::readOGR('GIS', 'TOKA_point_count_grid', verbose=F) #NAD83 UTM Zone 10N
+coords = coords[which(coords$Name %in% dat2$Point),] #drop points that were never surveyed
+coords@data = merge(coords@data, dat2, by.x='Name', by.y='Point', sort=F)
+coords = sp::spTransform(coords, CRS = sp::CRS('+proj=longlat'))
+
+## set color code for groups
+pal = colorBin(pointblue.palette[c(3,1,2)], bins = c(0, 0.333, 0.667, 1), domain = c(0, 1),
+               na.color=pointblue.palette[6])
+
+leaflet(height=500) %>% setView(lng=-122.3598, lat=37.26693, zoom=14) %>%
+  addProviderTiles("Stamen.Terrain", group='Terrain') %>% 
+  addPolygons(data=pasture, color='black', fillColor=pointblue.palette[6], fillOpacity=0.5, weight=1) %>%
+  addPolygons(data=tkranch, color='black', fill=F, weight=2.5) %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', 
+                   fillColor=~pal(N.perc), popup=~labelN, group='Total Nitrogen (N)') %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black',
+                   fillColor=~pal(K.perc), popup=~labelK, group='Potassium (K)') %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', 
+                   fillColor=~pal(Na.perc), popup=~labelNa, group='Sodium (Na)') %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', 
+                   fillColor=~pal(Mg.perc), popup=~labelMg, group='Magnesium (Mg)') %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', 
+                   fillColor=~pal(Ca.perc), popup=~labelCa, group='Calcium (Ca)') %>%
+  addCircleMarkers(data=coords, radius=6, weight=1.5, fillOpacity=1, color='black', 
+                   fillColor=~pal(pH.perc), popup=~labelpH, group='pH') %>%
+  addLegend(position='topright', title='Soil Metric', colors=pointblue.palette[c(2,1,3,6)], 
+            labels=c('High (>66th percentile)','Moderate (33rd-66th percentile)','Low (<33rd percentile)','No data'), opacity=1) %>%
+  addLayersControl(position='bottomleft', options=layersControlOptions(collapsed = F),
+                   baseGroups=c('Total Nitrogen (N)','Potassium (K)','Sodium (Na)',
+                                'Magnesium (Mg)','Calcium (Ca)','pH'))
+
+```
+</br>
+[Back to top](#top)
+</br></br>
+
+
+### Glossary
+
+<a id="density"></a>  
+<b>Bulk density:</b> An indicator of soil compaction, bulk density is measured as the weight of a soil sample divided by its volume (grams/cm^3^). Compacted soils have a higher bulk density, with reduced pore space for water infiltration, water retention, root growth, soil aeration, and seedling germination.
+
+<a id="infiltration"></a>  
+<b>Water infiltration rate:</b> Also an indicator of soil compaction, water infiltration rate is measured as the time required for soil to absorb water (minutes per inch of water). Compacted soils take longer to absorb water, increasing runoff and decreasing water available for local plant growth.
+
+<a id="carbon"></a>  
+<b>Organic carbon content:</b> An indicator of soil organic matter and soil productivity, organic carbon is measured as the percent of soil volume made up by organic carbon. Productive soils have an abundant microbial community that contribute to high levels of soil organic matter, driving plant growth and improving soil stabilization and capacity for storing water.
+
+<a id="overall"></a>  
+<b>Overall score:</b> To combine values of all 3 soil metrics above into one overall score, we first calculated a separate percentile score for each metric (including separate scores for surface and deeper soil carbon). These percentile scores represent how relatively good or poor each point scored for each metric compared to all the other TomKat soil sampling points, and they were based on fitting [empirical cumulative distribution functions](https://www.r-bloggers.com/exploratory-data-analysis-conceptual-foundations-of-empirical-cumulative-distribution-functions/) to each metric. We then calculated an overall percentile score as the mean of these individual percentile scores, so that points with a combination of high and low scores might fall in the "moderate" category.
+
+
+[Back to top](#top)
+</br></br>
+<a id="table"></a>
+
+### Soil data summary
+</br>
+<i>Sort by any column to find sites with the highest or lowest soil metrics, or click in the box at the bottom of each column to filter results.</i>
+</br>
+```{r datatable, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+show = dat[,c('Point','bulk.dens.gcm3','water.infil','carbonA','carbonB','mean.perc')]
+show[,c(2:3)] = round(show[,c(2:3)], digits=2)
+show[,c(4:5)] = round(show[,c(4:5)], digits=1)
+show$mean.perc = round(show$mean.perc*100, digits = 0)
+show$Point = as.factor(show$Point)
+
+DT::datatable(show, rownames=F, escape=F, filter='bottom',
+          colnames = c('Point','Bulk<br>Density<br>(g/cm<sup>3</sup>)',
+                       'Water <br>Infiltration<br>(min/in)','% Carbon<br>(0-10 cm)',
+                     '% Carbon<br>(10-40 cm)','Overall<br>Score'),
+          options=list(
+            autoWidth=F,
+            columnDefs = list(list(className = 'dt-center', targets = c(0:5))),
+            lengthMenu = list(c(10, 25, -1),c(10,25,'All')),
+            dom = 'T<"clear">lrtip',
+            order = list(list(5, 'desc'))
+          ))
+```
+[Back to top](#top)
+
+--------------  
+
+### About this page
+
+This interactive web page was produced using [RStudio](https://www.rstudio.com) with the packages [leaflet](http://rstudio.github.io/leaflet/) for mapping and [DT](https://rstudio.github.io/DT/) for data tables. RStudio is a free and open-source software for programming in [R](https://www.R-project.org/), a programming language for statistical computing and graphics. The code used to produce this web page is available online: XXX.
+
+
+### For more information
+
+Please contact:  
+[Nat Seavy, Ph.D.](mailto:nseavy@pointblue.org)  
+Research Director  
+Pacific Coast and Central Valley Group  
+Point Blue Conservation Science  
+
+
+-------------
+

@@ -1,0 +1,224 @@
+---
+title: ''
+output:
+  html_document:
+    theme: spacelab
+    css: tk_custom.css 
+---
+<a id="top"></a>
+<img src='figs/TomKat_TKREF-trans.png' alt="TomKat logo" style="width: 150px;"/>
+[<img src='figs/PB_logo_RGB_Full_Color_cs.png' alt="Point Blue logo" style="width: 200px;"/>](http://www.pointblue.org)
+
+
+
+TomKat Ranch: Honsinger Creek
+================================
+Beginning July 2011, Point Blue Conservation Science installed a stream gauge on Honsinger Creek and began monitoring [water temperature](#temp), [stream flow](#flow), and [stage](#stage), with assistance from Trout Unlimited. [Explore data](#table).
+
+
+```{r, echo=F, message=F, warning=F, fig.width=7, fig.height=4}
+pointblue.palette = c("#3682C7", "#64AD34", "#F38118", "#00459A", "#B3D225", "#96999C", "#5A5B5E")
+```
+  
+  
+### Daily water temperature, flow, and stage
+Daily average <font color='`r pointblue.palette[3]`'><b>water temperature</b></font>, <font color='`r pointblue.palette[2]`'><b>stream flow </b></font>, and <font color='`r pointblue.palette[1]`'><b>stage</b></font> from the Honsinger Creek stream gauge, along with the daily range observed.
+</br></br>
+<i>Click & drag the slider at the bottom to view different dates.</i>
+</br></br>
+
+#### Temperature (&deg;C)  
+  
+```{r daily.temp, echo=F, message=F, warning=F, fig.width=7, fig.height=1.5}
+## ----Daily stream data time series----
+dat = read.csv('data/HOCR_daily_stats.csv')
+dat$date = as.Date(dat$date)
+dat = xts::xts(dat[,2:ncol(dat)], order.by=dat$date)
+
+library(dygraphs)
+source('functions/dygraphs_utils.R')
+
+dygraph(dat[,c(1:3)], group='daily') %>% 
+  dyAxis('x', drawGrid=F, pixelsPerLabel=75, axisLabelColor='#FFFFFF', axisLabelFontSize = 6) %>% 
+  dyAxis('y', drawGrid=F, valueRange=c(0,22), valueFormatter=htmlwidgets::JS(getZero)) %>%
+  dyHighlight(highlightCircleSize = 4, highlightSeriesBackgroundAlpha = 1, hideOnMouseOut = T) %>%
+  dyEvent('2016-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2015-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2014-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2013-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2012-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2011-12-31', color=pointblue.palette[6]) %>%
+  dySeries(c('max.temp','avg.temp','min.temp'), 
+           label='Temperature (C)', color=pointblue.palette[3], strokeWidth=3) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, width=175)
+
+## temperatures above 23 bad for adult steelhead trout; optimal for juvenile growth is 15-18
+## Other ideas: Include daily precip in height plot; Plot height/temp vs. days after rain? Include map showing gauge location & topography/water catchment area?
+```
+
+#### Flow (cfs)
+
+``` {r daily.flow, echo=F, message=F, warning=F, fig.width=7, fig.height=1.5}
+dygraph(dat[,c(7:9)], group='daily') %>% 
+  dyAxis('x', drawGrid=F, pixelsPerLabel=100, axisLabelColor='#FFFFFF', axisLabelFontSize = 6) %>% 
+  dyAxis('y', drawGrid=F, valueRange=c(0,11), valueFormatter=htmlwidgets::JS(getZero)) %>%
+  dyHighlight(highlightCircleSize = 4, highlightSeriesBackgroundAlpha = 1, hideOnMouseOut = T) %>%
+  dyEvent('2016-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2015-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2014-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2013-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2012-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2011-12-31', color=pointblue.palette[6]) %>%
+  dySeries(c('max.flow','avg.flow','min.flow'), 
+           label='Flow (cfs)', color=pointblue.palette[2], strokeWidth=3) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, width=150)
+```
+
+#### Stage (ft)
+
+``` {r daily.stage, echo=F, message=F, warning=F, fig.width=7, fig.height=1.5}
+dygraph(dat[,c(4:6)], group='daily') %>% 
+  dyAxis('x', drawGrid=F, pixelsPerLabel=75, axisLabelFontSize = 12) %>% 
+  dyAxis('y', drawGrid=F, valueRange=c(0,3), valueFormatter=htmlwidgets::JS(getZero)) %>%
+  dyHighlight(highlightCircleSize = 4, highlightSeriesBackgroundAlpha = 1, hideOnMouseOut = T) %>%
+  dyEvent('2016-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2015-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2014-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2013-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2012-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2011-12-31', color=pointblue.palette[6]) %>%
+  dySeries(c('max.stage','avg.stage','min.stage'), 
+           label='Stage (ft)', color=pointblue.palette[1], strokeWidth=3) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, width=150) %>%
+  dyRangeSelector(height=20, 
+                  dateWindow = c(as.Date(max(zoo::index(dat))-240),as.Date(max(zoo::index(dat))+2)))
+```
+</br>
+[Back to top](#top)
+</br></br>
+<a id='diff'></a>
+
+### Warmer water and lower flows
+Since the stream gauge was installed in 2011, water temperatures have trended higher, consistent with the warm weather observed at TomKat. Stream flow and stage were below average during all of 2013, 2014, and 2015, consistent with the ongoing drought, but increased during Jan-Mar 2016. Values greater than zero are above the 2011-2016 monthly average.
+</br></br>
+
+#### Temperature (&deg;C)  
+
+```{r diff.temp, echo=F, message=F, warning=F, fig.width=7, fig.height=1.5}
+##----Monthly difference from long-term average----
+mdat = read.csv('data/HOCR_monthly_stats.csv')
+mdat$date = as.Date(mdat$date)
+mdat = xts::xts(mdat[,2:ncol(mdat)], order.by=mdat$date)
+
+dygraph(mdat[, c('diff.temp')], group='diff') %>% 
+  dyAxis('x', drawGrid=F, pixelsPerLabel=75, axisLabelColor='#FFFFFF', axisLabelFontSize = 6) %>% 
+  dyAxis('y', drawGrid=F, valueRange=c(-3,6), rangePad=10, pixelsPerLabel=20) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = F, hideOnMouseOut = FALSE, width=150) %>%
+  dySeries(plotter=barChart, color=pointblue.palette[3], label='Difference (C)') %>%
+  dyLimit(0, color='black', strokePattern = 'solid', label='Average') %>%
+  dyHighlight(highlightCircleSize=4, hideOnMouseOut = FALSE, highlightSeriesBackgroundAlpha = 1) %>%
+  dyEvent('2016-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2015-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2014-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2013-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2012-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2011-12-31', color=pointblue.palette[6])
+```
+
+#### Flow (cfs)
+
+```{r diff.flow, echo=F, message=F, warning=F, fig.width=7, fig.height=1.5}
+dygraph(mdat[, c('diff.flow')], group='diff') %>% 
+  dyAxis('x', drawGrid=F, pixelsPerLabel=75, axisLabelColor='#FFFFFF', axisLabelFontSize = 6) %>% 
+  dyAxis('y', drawGrid=F, valueRange=c(-1,3), rangePad=10, pixelsPerLabel=20) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, hideOnMouseOut = FALSE, width=150) %>%
+  dySeries(plotter=barChart, color=pointblue.palette[2], label='Difference (cfs)') %>%
+  dyLimit(0, color='black', strokePattern = 'solid', label='Average') %>%
+  dyHighlight(highlightCircleSize=4, hideOnMouseOut = FALSE, highlightSeriesBackgroundAlpha = 1) %>%
+  dyEvent('2016-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2015-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2014-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2013-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2012-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2011-12-31', color=pointblue.palette[6])
+```
+
+#### Stage (ft)
+
+```{r diff.stage, echo=F, message=F, warning=F, fig.width=7, fig.height=1.5}
+dygraph(mdat[, c('diff.stage')], group='diff') %>% 
+  dyAxis('x', drawGrid=F, pixelsPerLabel=75, axisLabelFontSize = 12) %>% 
+  dyAxis('y', drawGrid=F, valueRange=c(-0.5,0.8), rangePad=10, pixelsPerLabel=20) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, hideOnMouseOut = FALSE, width=150) %>%
+  dySeries(plotter=barChart, color=pointblue.palette[1], label='Difference (ft)') %>%
+  dyLimit(0, color='black', strokePattern = 'solid', label='Average') %>%
+  dyHighlight(highlightCircleSize=4, hideOnMouseOut = FALSE, highlightSeriesBackgroundAlpha = 1) %>%
+  dyEvent('2016-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2015-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2014-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2013-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2012-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2011-12-31', color=pointblue.palette[6])
+```
+[Back to top](#top)
+
+</br></br>
+<a id="glossary"></a>
+
+### Glossary
+
+<a id="temp"></a>  
+**Water temperature:** Water temperature determines the aquatic life that can survive in a stream. Many species have a preferred temperature range and will leave or experience stress or mortality if water temperatures are too high. Warm water also holds less oxygen than cool water, further stressing aquatic life. The source of the water (such as a spring) determines the initial temperature, and the physical character of the stream and surrounding watershed have important influences. A stream with fast-flowing water (such as on a steep slope), with deep pools and extensive shade will have cooler temperatures than a slow-flowing, wide and shallow stream exposed to sunlight.
+
+<a id="flow"></a>  
+**Stream Flow:** Stream flow is a measurement of the volume of water flowing through the stream channel per unit of time (commonly cubic feet per second, or cfs), and is strongly related to stage (see below). No stream flow measurements were taken between November 2014 and October 2015.
+
+<a id="stage"></a>  
+**Stage:** Stage is a measurement of water depth and is strongly related to stream flow, but is usually easier to measure. The higher the stage, the higher the stream flow, but the exact relationship between the two depends on the shape of the stream channel. In Honsinger Creek, the relationship between stage and stream flow likely varies between years because of frequent changes to the channel bed and sensor drift.
+
+[Back to top](#top)
+
+</br></br>
+<a id="table"></a>
+
+### Monthly stream data summary  
+</br>
+<i>Sort by any column to find warmest, coldest, or wettest months recorded at the TomKat weather station.</i>
+</br>
+```{r datatable, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+library(DT)
+
+mdat = read.csv('data/HOCR_monthly_stats.csv')
+mdat$date = as.Date(mdat$date)
+show = mdat[, c('date','avg.temp','avg.flow','avg.stage')]
+show = show[order(show$date, decreasing=T),]
+show$date = format(show$date, '%b %Y')
+show[,c(2:4)] = format(round(show[,c(2:4)], digits=2),nsmall=2)
+
+datatable(show, rownames=F, escape=F, 
+          colnames = c('Month','Mean temp<br/>(C)','Mean flow<br/>(cfs)','Mean stage<br/>(ft)'),
+          options=list(
+            autoWidth = F,
+            columnDefs = list(list(className = 'dt-center', targets = c(1:3))),
+            lengthMenu = list(c(10, 25, 50, -1),c(10,25,50,'All')),
+            dom = 'T<"clear">lrtip'))
+```  
+[Back to top](#top)
+
+-------------  
+
+### About this page
+
+This interactive web page was produced using [RStudio](https://www.rstudio.com) with the packages [dygraphs](https://rstudio.github.io/dygraphs/) for time series graphs and [DT](https://rstudio.github.io/DT/) for data tables. RStudio is a free and open-source software for programming in [R](https://www.R-project.org/), a programming language for statistical computing and graphics. The code used to produce this web page is available online: XXX.
+
+
+### For more information
+
+Please contact:  
+[Nat Seavy, Ph.D.](mailto:nseavy@pointblue.org)  
+Research Director  
+Pacific Coast and Central Valley Group  
+Point Blue Conservation Science  
+
+
+-------------

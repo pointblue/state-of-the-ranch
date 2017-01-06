@@ -1,0 +1,341 @@
+---
+title: ''
+output:
+  html_document:
+    theme: spacelab
+    css: tk_custom.css 
+---
+<a id="top"></a>
+<img src='figs/TomKat_TKREF-trans.png' alt="TomKat logo" style="width: 150px;"/>
+[<img src='figs/PB_logo_RGB_Full_Color_cs.png' alt="Point Blue logo" style="width: 200px;"/>](http://www.pointblue.org)
+
+
+
+TomKat Ranch: Birds
+===============================
+```{r data, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----summary of bird survey effort----
+dat = read.csv('data/TK_PC_master.csv')
+
+## fix point names to match shapefiles
+dat$Point = gsub('TK', 'TOKA-', dat$Point)
+dat$Point = gsub('HOCR', 'HOCR-0', dat$Point)
+
+## add unique visit ID, numeric distance field, drop unidentified species
+dat$Visit = paste(dat$Year, dat$Visit, sep='-')
+
+## exclude unidentified spp, SPHU since ALHU&RUHU are both in there
+dat = dat[-which(substr(dat$Spp,1,2) %in% c('UN','XX') | dat$Spp=='SPHU'),]
+## combine duplicate species IDs
+dat$Spp[dat$Spp=='BSKI'] = 'WTKI' 
+dat$Spp[dat$Spp=='RSFL'] = 'NOFL' 
+dat$Spp[dat$Spp=='ORJU'] = 'DEJU' 
+dat$Spp[dat$Spp=='ECDO'] = 'EUCD' 
+dat$Spp[dat$Spp=='WIWR'] = 'PAWR' 
+
+## total species richness :
+nspecies = length(unique(dat$Spp)) #91
+
+## total # surveys conducted:
+nsurveys = length(unique(paste0(dat$Point, dat$Visit))) #951
+```
+
+Since 2010, Point Blue Conservation Science has conducted <font size=4><b>`r nsurveys` bird surveys</b></font> across TomKat Ranch during May and June and detected a total of <font size=4><b>`r nspecies` bird species</b></font>. Each year, biologists conduct point count surveys for birds at a random sample of points chosen from a grid across the ranch, as well as at 12 points in riparian vegetation along Honsinger Creek. We analyzed this data to examine spatial patterns in [grassland bird abundance](#distribution) and [species richness](#richness) across the ranch, as well as ranch-wide [trends in grassland bird abundance](#trends) and [trends in species richness](#richtrend). [Explore the species list](#table).</br>
+</br>
+
+<a id='distribution'></a>
+
+### Focal species abundance, 2010-2016  
+
+The density of grassland focal species (Grasshopper Sparrow and Savannah Sparrow) varies across the ranch. We compiled all bird survey data across years to estimate the average density (individuals per hectare) of each species at each survey point across the ranch.
+</br></br>
+<i>Choose a focal species at bottom left. Click on any of the grid cells for the density estimate.</i>
+
+```{r focalabund, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----MAP: focal species density (all years combined)----
+## Note: distance sampling analysis conducted separately
+focaldens = read.csv('data/TK_PC_density_by_point.csv')
+focaldens$Label = gsub('TK', 'TOKA-', focaldens$Label)
+
+## point count coordinates
+coords = rgdal::readOGR('GIS', 'TOKA_point_count_grid', verbose=F) #NAD83 UTM Zone 10N
+coords = coords[which(coords$Name %in% focaldens$Label),] #drop points that were never surveyed
+
+## join focal species density estimates to point count coordinates
+grsp = coords
+grsp@data = merge(grsp@data, focaldens[which(focaldens$species=='GRSP'),c('Label','Estimate','lcl','ucl')],
+                  by.x='Name', by.y='Label')
+savs = coords
+savs@data = merge(savs@data, focaldens[which(focaldens$species=='SAVS'),c('Label','Estimate','lcl','ucl')],
+                  by.x='Name', by.y='Label')
+
+tmp = plyr::ddply(focaldens, plyr::.(Label), plyr::summarize, Estimate = sum(Estimate))
+all = coords
+all@data = merge(all@data, tmp, by.x='Name', by.y='Label')
+
+## convert points to rasters with density estimates as value
+library(raster)
+r <- raster(ncol = 21, nrow = 13, resolution = c(200, 200), xmn = extent(coords)[1]-100, 
+            xmx = extent(coords)[2]+100, ymn = extent(coords)[3]-100, ymx = extent(coords)[4]+100, 
+            crs = proj4string(coords))
+
+#convert to projection required by leaflet
+r <- projectRaster(r, method='bilinear', crs=CRS('+init=epsg:3857')) 
+grsp = sp::spTransform(grsp, CRS = sp::CRS('+init=epsg:3857'))
+savs = sp::spTransform(savs, CRS = sp::CRS('+init=epsg:3857'))
+all = sp::spTransform(all, CRS = sp::CRS('+init=epsg:3857'))
+
+# transfer density values from point count coordinates to corresponding raster cell
+grsp_rast = rasterize(grsp, r, field=grsp$Estimate)
+savs_rast = rasterize(savs, r, field=savs$Estimate)
+all_rast = rasterize(all, r, field=all$Estimate)
+
+# convert points to longlat for mapping
+grsp = sp::spTransform(grsp, CRS = sp::CRS('+proj=longlat'))
+savs = sp::spTransform(savs, CRS = sp::CRS('+proj=longlat'))
+all = sp::spTransform(all, CRS = sp::CRS('+proj=longlat'))
+
+## ranch polygon
+tkranch = rgdal::readOGR('GIS', 'TomKat_ranch_boundary', verbose=F)
+tkranch = sp::spTransform(tkranch, CRS = sp::CRS('+proj=longlat'))
+
+## pasture polygons
+pasture = rgdal::readOGR('GIS','TK_Veg_Fields2012_kd_edit', verbose=F)
+pasture = sp::spTransform(pasture, CRS = sp::CRS('+proj=longlat'))
+
+## draw map
+library(leaflet)
+
+## set color scale
+pointblue.palette = c('#4495d1', '#74b743', '#f7941d', '#005baa', '#bfd730', '#a7a9ac', '#666666')
+## go through point blue orange, to dark orange
+palette = colorBin(c('#ffffff', pointblue.palette[4]), 
+                   bins = c(0, 0.001, 1, 5, max(values(all_rast), na.rm=T)+1), 
+                   domain = c(0, max(values(all_rast), na.rm=T)+1), na.color='transparent')
+
+leaflet(height=500) %>% setView(lng=-122.3598, lat=37.26693, zoom=14) %>%
+  addProviderTiles("Stamen.Terrain") %>%
+  addRasterImage(all_rast, opacity=0.8, group='Combined', color=palette, project=F) %>%
+  addRasterImage(grsp_rast, opacity=0.8, group='Grasshopper Sparrow', color=palette, project=F) %>%
+  addRasterImage(savs_rast, opacity=0.8, group='Savannah Sparrow', color=palette, project=F) %>%
+  addPolygons(data=tkranch, color='black', fill=F, weight=2.5) %>%
+  addPolygons(data=pasture, color='black', fillColor=pointblue.palette[6], fillOpacity=0.2, weight=1) %>%
+  addCircleMarkers(data=all, radius=11, weight=1.5, color='transparent', fillColor='transparent',
+                   popup = ~paste0('<b>', Name, '</b><br>Density: ',round(Estimate, digits = 2)), 
+                   options = popupOptions(maxWidth=800), group = 'Combined') %>%
+  addCircleMarkers(data=grsp, radius=11, weight=1.5, color='transparent', fillColor='transparent',
+                   popup=~paste0('<b>', Name, '</b><br>Density: ',round(Estimate, digits = 2)), 
+                   options = popupOptions(maxWidth=800), group = 'Grasshopper Sparrow') %>%
+  addCircleMarkers(data=savs, radius=11, weight=1.5, color='transparent', fillColor='transparent',
+                   popup=~paste0('<b>', Name, '</b><br>Density: ',round(Estimate, digits = 2)), 
+                   options = popupOptions(maxWidth=800), group = 'Savannah Sparrow') %>%
+  addLegend(position='topright', colors=palette(c(0,0.01,1,5)), labels=c('0','<1','1-5','>5'), opacity=0.8,
+            title='Density<br>(individuals/ha)') %>%
+  addLayersControl(position='bottomleft',baseGroups=c('Combined','Grasshopper Sparrow','Savannah Sparrow'), 
+                   options=layersControlOptions(collapsed=F))
+```
+</br>
+[Back to top](#top)
+
+
+</br></br>
+<a id='trends'></a>  
+
+### Focal species trends, 2010-2016  
+  
+We compiled bird survey data from all point count stations in grassland to estimate the average density (individuals per hectare) of each focal species in each year. Since 2010, we have observed a ranch-wide decline in the density of <font color='`r pointblue.palette[3]`'><b>Savannah Sparrows</b></font>. <font color='`r pointblue.palette[2]`'><b>Grasshopper Sparrows</b></font> were fairly steady between 2010 and 2014, but increased in 2015 and declined in 2016.
+
+```{r focaltrend, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----FIGURE: focal species trends (all TK grassland points combined)----
+## Note: distance sampling analysis conducted separately
+focaltrend = read.csv('data/TK_PC_density_by_year.csv')
+focaltrend$species = plyr::revalue(focaltrend$species, c('GRSP'='Grasshopper Sparrow','SAVS'='Savannah Sparrow'))
+focaltrend = plyr::rename(focaltrend, c('year'='Year', 'Estimate'='Density', 'ucl'='UCL', 'lcl'='LCL', 'species'='Species'))
+
+library(ggplot2)
+theme_custom = theme_classic() +
+  theme(legend.title=element_blank(), legend.position=c(0,1), legend.justification=c(0,1),
+        legend.text=element_text(size=10), axis.text=element_text(size=12), 
+        axis.title=element_text(size=12, vjust=1, face='plain'),
+        axis.line.y = element_line(color="black"), axis.line.x = element_line(color="black"))
+
+p = ggplot(focaltrend, aes(x=Year, y=Density, ymin=LCL, ymax=UCL, color=Species)) + geom_line(aes(group=Species)) + geom_errorbar(width=0.2) + geom_point() + theme_custom + xlab(NULL) + ylab('Density (individuals/ha)') + scale_color_manual(values=pointblue.palette[2:3])
+
+plotly::ggplotly(p) %>% plotly::layout(legend = list(x = 0, y = 1, tracegroupgap=5))
+
+```
+</br>
+[Back to top](#top)
+
+
+</br></br>
+<a id='richness'></a>  
+
+### Species richness is concentrated in riparian areas  
+  
+```{r richness, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----CALCULATE TOTAL SPECIES RICHNESS----
+## total # species ever detected within 100m of each point (excluding flyovers already dropped from data)
+rich = plyr::ddply(dat[dat$Distance<=100,], plyr::.(Transect, Point), plyr::summarize,
+             nspecies = length(unique(Spp)),
+             nvisits = length(unique(Visit)))
+rich$group = cut(rich$nspecies, breaks=c(0, quantile(rich$nspecies, c(0.05,0.25,0.75,0.95)), max(rich$nspecies)), include.lowest=T, labels=F)
+rich$group = as.numeric(rich$group)
+richmin = min(rich$nspecies)
+richmax = max(rich$nspecies)
+```
+We counted the total number of species ever detected within 100 m of each point count station since 2010, which ranged from <b><font size=4>`r richmin` to `r richmax` species</font></b>. Points in riparian vegetation along Honsinger Creek had higher species richness than most other places across the ranch. The shading of the cell corresponds to the number of species detected in that cell, with white being the lowest and dark orange being the highest. 
+</br></br>
+<i>Click on any of the points or grid cells for the number of species detected.</i>
+
+```{r richnessmap, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----MAP: overall species richness----
+## match richness totals to point count coordinates
+hocr = rgdal::readOGR('GIS', 'HOCR_point_count_riparian', verbose=F)
+hocr$veg = 'riparian'
+hocr = hocr[which(hocr$Name %in% rich$Point),]
+hocr@data = merge(hocr@data, rich[which(rich$Transect=='HOCR'),c('Point','nspecies','group')], by.x='Name', by.y='Point', sort=F)
+hocr = sp::spTransform(hocr, CRS = sp::CRS('+proj=longlat'))
+
+toka = rgdal::readOGR('GIS', 'TOKA_point_count_grid_with_landcover', verbose=F) 
+toka$veg = toka$LND_TYPE2
+toka$veg = plyr::revalue(toka$veg, c('pasture'='grassland','hay'='grassland','shrub'='other','euc grove'='other'))
+toka = toka[which(toka$Name %in% rich$Point),]
+toka@data = merge(toka@data, rich[which(rich$Transect=='TK'),c('Point','nspecies','group')], by.x='Name', by.y='Point', sort=F)
+
+## convert TOKA points to rasters with density estimates as value
+r <- raster(ncol=21, nrow=13, resolution=c(200,200), xmn=extent(toka)[1]-100, xmx=extent(toka)[2]+100, 
+            ymn=extent(toka)[3]-100, ymx=extent(toka)[4]+100, crs=proj4string(toka))
+r <- projectRaster(r, method='bilinear', crs=CRS('+init=epsg:3857'))
+toka = sp::spTransform(toka, CRS = sp::CRS('+init=epsg:3857'))
+toka_rast = rasterize(toka, r, field=toka$nspecies)
+toka = sp::spTransform(toka, CRS = sp::CRS('+proj=longlat'))
+
+# quantile(rich$nspecies, c(0.05,0.25,0.5,0.75,0.95))
+# palette = colorFactor(c('#ffffff', pointblue.palette[3], '#B66012'), domain=c(1,5),
+#                    levels=c(1:5), ordered=T, na.color='transparent')
+palette = colorQuantile(c('#ffffff', pointblue.palette[4]), probs=c(0,0.05,0.25,0.75,0.95,1),
+                   domain=rich$nspecies, na.color='transparent')
+labs = quantile(rich$nspecies, c(0,0.05,0.25,0.75,0.95,1))
+
+leaflet(height=500) %>% setView(lng=-122.3598, lat=37.26693, zoom=14) %>%
+  addProviderTiles("Stamen.Terrain") %>%
+  addRasterImage(toka_rast, opacity=0.8, color=palette, project=F) %>%
+  addPolygons(data=tkranch, color='black', fill=F, weight=2.5) %>%
+  addPolygons(data=pasture, color='black', fillColor=pointblue.palette[6], fillOpacity=0.2, weight=1) %>%
+  addCircleMarkers(data=toka, radius=10, weight=1.5, color='transparent',
+                   fillColor='transparent',
+                   popup=~paste0('<b>',Name,'</b><br>Species: ',nspecies), options=popupOptions(maxWidth=800)) %>%
+  addCircleMarkers(data=hocr, radius=8, weight=1.5, color='black',  
+                   fillColor=~palette(nspecies), fillOpacity=0.8,
+                   popup=~paste0('<b>',Name,'</b><br>Species: ',nspecies), options=popupOptions(maxWidth=800)) %>%
+  addLegend(position='topright', colors=palette(labs[2:6]-1), opacity=0.8, title='Species<br>richness',
+            labels=c(paste(0, labs[2],sep='-'), paste(labs[2]+1,labs[3],sep='-'),
+                     paste(labs[3]+1,labs[4],sep='-'), paste(labs[4]+1,labs[5],sep='-'), 
+                     paste(labs[5]+1, labs[6], sep='-'))) 
+```
+</br>
+[Back to top](#top)
+
+
+</br></br>
+<a id='richtrend'></a>
+
+### Small decline in species richness  
+For each year of bird survey data, we calculated the total number of species detected within 100 meters of each point count station, and we calculated the average number of species detected each year from point count stations in grassland vegetation across the ranch or in riparian vegetation along Honsinger Creek (shown with standard error). We detected a small but statistically significant decline in species richness at both the <font color='`r pointblue.palette[4]`'><b>riparian points</b></font> along Honsinger Creek and the <font color='`r pointblue.palette[2]`'><b>grassland points</b></font> across the ranch.
+
+```{r richtrend, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+## ----FIGURE: richness trends - riparian vs. grassland----
+## add veg categories to point count data
+veg = plyr::rbind.fill(toka@data, hocr@data)
+veg = veg[,c('Name','veg')]
+veg$veg = as.factor(veg$veg)
+dat = merge(dat, veg, by.x='Point', by.y='Name', all.x=T)
+
+## total richness per Point and year (over all visits)
+richyr = plyr::ddply(dat[dat$Distance<=100,], plyr::.(Transect,Point,veg,Year), plyr::summarize, 
+                     nspecies = length(unique(Spp)),
+                     nvisits = length(unique(Visit)))
+# table(richyr$veg, richyr$Year)
+
+## drop points in "other" veg, since not surveyed after 2013
+richyr = richyr[-which(richyr$veg=='other'),]
+richyr$veg = plyr::revalue(richyr$veg, c('grassland'='Grassland','riparian'='Riparian'))
+richyr$veg = factor(richyr$veg, levels=c('Riparian','Grassland'))
+
+## generally 2 visits per point per year, so don't worry about effort?
+mod = glm(nspecies~Year*veg, richyr, family=quasipoisson) ## no support for interaction
+mod2 = glm(nspecies~Year+veg, richyr, family=quasipoisson) ## both significantly declining, but grassland worse
+
+## avg richness per transect & year across all points
+richyrsum = plyr::ddply(richyr, plyr::.(veg, Year), plyr::summarize, 
+                     Average = mean(nspecies), se = sd(nspecies)/sqrt(length(nspecies)))
+richyrsum$LowerSE = richyrsum$Average-richyrsum$se
+richyrsum$UpperSE = richyrsum$Average+richyrsum$se
+
+p = ggplot(richyrsum[richyrsum$veg %in% c('Grassland','Riparian'),], 
+           aes(x=Year, y=Average, ymin=LowerSE, ymax=UpperSE, color=veg)) +
+  geom_line(aes(group=veg)) + geom_errorbar(width=0.2) + geom_point() + theme_custom + xlab(NULL) +
+  ylab('Number of species') + scale_color_manual(values=pointblue.palette[c(4,2)]) + ylim(0,26)
+
+plotly::ggplotly(p) %>% plotly::layout(legend = list(x = 0, y = 1, tracegroupgap=5))
+
+```
+</br>
+[Back to top](#top)
+
+
+</br></br>
+<a id='table'></a>
+
+### Species list  
+Full list of species detected since 2010 within 100 m of any point count station (excluding species only seen flying over), and whether they were detected from points in riparian vegetation along Honsinger Creek, grassland points in the grid across TomKat Ranch, or a small number of other points surveyed in shrub or woodland habitat on the ranch.
+</br></br>
+<i>Sort by any column to find species of interest.</i>
+
+```{r datatable, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+dat$veg = factor(dat$veg, levels=c('riparian','grassland','other'))
+show = reshape2::dcast(dat, CommonName+ScientificName+Spp~veg, value.var='Count', sum)
+show = show[-which(show$CommonName=='Black-shouldered Kite'),]
+show = show[-which(duplicated(show$Spp)),]
+show$grassland = cut(show$grassland, breaks=c(-Inf,0,max(show$grassland)), labels=c('','X'))
+show$other = cut(show$other, breaks=c(-Inf,0,max(show$other)), labels=c('','X'))
+show$riparian = cut(show$riparian, breaks=c(-Inf,0,max(show$riparian)), labels=c('','X'))
+
+show$CommonName = as.character(show$CommonName)
+show$CommonName[show$Spp=='NUWO'] = "Nuttall's Woodpecker"
+show$ScientificName = as.character(show$ScientificName)
+show$ScientificName[show$Spp=='NUWO'] = "Picoides nuttallii"
+show = show[order(show$CommonName),]
+
+library(DT)
+datatable(show, rownames=F, escape=F, 
+          colnames = c('Common Name','Scientific Name', 'Species<br/>Code', 'Riparian','Grassland', 'Other'),
+          options=list(
+            autoWidth=F,
+            columnDefs = list(list(className = 'dt-center', targets = c(2:5))),
+            lengthMenu = list(c(10, 25, 50, -1),c(10,25,50,'All')),
+            dom = 'T<"clear">lrtip'
+          ))
+```
+[Back to top](#top)
+
+
+</br></br>
+
+
+-------------
+
+### About this page
+
+This interactive web page was produced using [RStudio](https://www.rstudio.com) with the packages [leaflet](http://rstudio.github.io/leaflet/) for mapping, [plotly](https://plot.ly/ggplot2/) for graphs, and [DT](https://rstudio.github.io/DT/) for data tables. RStudio is a free and open-source software for programming in [R](https://www.R-project.org/), a programming language for statistical computing and graphics. The code used to produce this web page is available online: XXX.
+
+
+### For more information
+
+Please contact:  
+[Nat Seavy, Ph.D.](mailto:nseavy@pointblue.org)  
+Research Director  
+Pacific Coast and Central Valley Group  
+Point Blue Conservation Science  
+

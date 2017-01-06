@@ -1,0 +1,345 @@
+---
+title: ''
+output:
+  html_document:
+    theme: spacelab
+    css: tk_custom.css 
+---
+<a id="top"></a>
+<img src='figs/TomKat_TKREF-trans.png' alt="TomKat logo" style="width: 150px;"/>
+[<img src='figs/PB_logo_RGB_Full_Color_cs.png' alt="Point Blue logo" style="width: 200px;"/>](http://www.pointblue.org)
+
+
+
+TomKat Ranch: Weather
+=========================
+Point Blue Conservation Science established a weather station at TomKat Ranch in September 2010. Since 2013, we have observed [consistently warm and dry weather](#diff) and [extreme drought](#drought) conditions, although the drought has begun to relax in 2016. [Explore data](#table).
+
+
+```{r, echo=F, message=F, warning=F, fig.width=7, fig.height=4}
+pointblue.palette = c('#4495d1', '#74b743', '#f7941d', '#005baa', '#bfd730', '#a7a9ac', '#666666')
+
+pal = colorRampPalette(c('#ffffff',pointblue.palette[1]))
+blues = pal(6)
+pal2 = colorRampPalette(c('#ffffff',pointblue.palette[3]))
+oranges = pal2(6)
+
+```
+<a id='daily'></a>  
+
+
+### Daily weather
+Daily <font color="`r pointblue.palette[3]`"><b>high temperature</b></font>, <font color="`r pointblue.palette[2]`"><b>low temperature</b></font>, and <font color="`r pointblue.palette[1]`"><b>precipitation</b></font> from the TomKat weather station, along with the <font color="`r pointblue.palette[7]`"><b>range of temperatures and precipitation</b></font> observed on each date since the weather station was established. <i>Note: No weather data were recorded between March and August 2016 when the weather station was being updated.</i>
+
+The highest temperature yet recorded was <b>91.7&deg;F</b> on August 15, 2015. The lowest was <b>31.7&deg;F</b> on December 8, 2013. The single rainiest day was December 12, 2014, with a total of <b>7.76 inches</b> recorded.
+</br></br>
+<i>Click & drag the slider at the bottom to view different dates.</i>
+</br></br>
+```{r daily, echo=F, message=F, warning=F, fig.width=7, fig.height=4}
+##----Explore daily weather data----
+dat = read.csv('data/TK_weather_daily_stats.csv')
+colnames(dat)[c(2:3,6)] = c('high','low','rain')
+dat = dat[,c('date','high','low','rain')]
+dat$date = as.Date(dat$date)
+
+## find record high/low (since 2010) for each date, only from all previous years
+dat$day = as.factor(format(dat$date, '%m-%d'))
+sdat = plyr::ddply(dat, plyr::.(day), plyr::summarize,
+            max.high = max(high, na.rm=T),
+            min.high = min(high, na.rm=T),
+            max.low = max(low, na.rm=T),
+            min.low = min(low, na.rm=T),
+            max.rain = max(rain, na.rm=T),
+            min.rain = min(rain, na.rm=T))
+
+dat = merge(dat, sdat, by='day', all.x=T, sort=F)
+rm(sdat)
+
+## change to time series
+dat$day = NULL
+dat = dat[order(dat$date),]
+dat = xts::xts(dat[,c('max.high','high','min.high','max.low','low','min.low','max.rain','rain','min.rain')], order.by=dat$date)
+
+library(dygraphs)
+source('functions/dygraphs_utils.R')
+
+dygraph(dat) %>% 
+  dyAxis('x', drawGrid=F, pixelsPerLabel=75) %>% 
+  dyAxis('y', drawGrid=F, valueRange=c(0,95), label='Temperature (F)', 
+         valueFormatter=htmlwidgets::JS(getZero)) %>%
+  dyAxis('y2', drawGrid=F, valueRange=c(0,9.5), label='Precipitation (in)',
+         valueFormatter=htmlwidgets::JS(getZero)) %>%
+  dyHighlight(highlightCircleSize = 4, highlightSeriesBackgroundAlpha = 1, hideOnMouseOut = F) %>%
+  dyEvent('2016-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2015-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2014-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2013-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2012-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2011-12-31', color=pointblue.palette[6]) %>%
+  dyEvent('2010-12-31', color=pointblue.palette[6]) %>%
+  dySeries(names(dat)[1:3], label='High temp', color=pointblue.palette[3], strokeWidth=3) %>%
+  dySeries(names(dat)[4:6], label='Low temp', color=pointblue.palette[2], strokeWidth=3) %>%
+  dySeries(names(dat)[7:9], label='Precipitation', color=pointblue.palette[1], strokeWidth=3, axis='y2') %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, show='follow') %>%
+  dyRangeSelector(height=20, dateWindow = 
+                    c(as.Date(max(zoo::index(dat))-540),as.Date(max(zoo::index(dat))+2)))
+```
+</br>
+[Back to top](#top)
+</br></br>
+<a id='diff'></a>
+
+### Consistently warm and dry weather for over 3 years  
+TomKat has been warmer and dryer than historic averages in almost every month since the spring of 2013, including during the <b>growing season</b> (March-June, shaded). Values greater than zero are above the historic average (1980-2010), and values below zero are below average.
+</br></br>
+
+#### High temperatures (F)
+The monthly average high temperature in January 2014 exceeded the record average high temperature for any January between 1980 and 2010, and high temperatures have stayed warmer than historic average in almost every month since, breaking the historic record 7 more times.
+
+```{r diff.high, echo=F, message=F, warning=F, fig.width=7, fig.height=2}
+##----Monthly difference from long-term average----
+mdat = read.csv('data/TK_weather_historicdiff.csv')
+names(mdat)[c(2:3,6)] = c('high','low','rain')
+mdat = mdat[,c('date','high','low','rain')]
+mdat$date = as.Date(mdat$date)
+
+## Half Moon Bay weather extremes (1980-2010 differences from normals)
+hmb = read.csv('data/HMB_monthly_weather_extremes.csv')
+hmb = hmb[,c('mo','variable','max.diff','min.diff')]
+names(hmb)[3:4] = c('max','min')
+hmb = reshape2::melt(hmb, id.vars=c('mo','variable'), variable.name='type')
+hmb = reshape2::dcast(hmb, mo~type+variable)
+
+mdat$mo = as.numeric(format(mdat$date, '%m'))
+mdat = merge(mdat, hmb, by='mo', all.x=T, sort=F)
+rm(hmb)
+# mdat[is.na(mdat$high), c('max.high','min.high')] = NA
+# mdat[is.na(mdat$low), c('max.low','min.low')] = NA
+
+## change to time series
+mdat$mo = NULL
+mdat = mdat[order(mdat$date),]
+mdat = xts::xts(mdat[,c('max_high','high','min_high','max_low','low','min_low','max_rain','rain','min_rain')], order.by=mdat$date)
+
+dygraph(mdat[,1:3], group='diff') %>% 
+  dyAxis('x', drawGrid=F, axisLabelFormatter=htmlwidgets::JS(getYear), pixelsPerLabel=50, 
+         valueFormatter=htmlwidgets::JS(getMonthYear), rangePad=10) %>% 
+  dyAxis('y', drawGrid=F, rangePad=10, pixelsPerLabel=20) %>%
+  dyShading(from='2016-03-01', to='2016-06-30') %>%
+  dyShading(from='2015-03-01', to='2015-06-30') %>%
+  dyShading(from='2014-03-01', to='2014-06-30') %>%
+  dyShading(from='2013-03-01', to='2013-06-30') %>%
+  dyShading(from='2012-03-01', to='2012-06-30') %>%
+  dyShading(from='2011-03-01', to='2011-06-30') %>%
+  dySeries(names(mdat)[2], plotter=barChart, color=pointblue.palette[3], label='Difference from historic (F)') %>%
+  dyLimit(0, color='black', strokePattern = 'solid', label='Average') %>%
+  dySeries(names(mdat)[1], strokePattern = 'dotted', color=pointblue.palette[7], strokeWidth=2, 
+           label='1980-2010 Max') %>%
+  dySeries(names(mdat)[3], strokePattern = 'dotted', color=pointblue.palette[7], strokeWidth=2, 
+           label='1980-2010 Min') %>%
+  dyHighlight(highlightCircleSize=4, hideOnMouseOut = FALSE, highlightSeriesBackgroundAlpha = 1) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = F, show='follow')
+```
+</br>
+
+#### Low temperatures (F)
+Monthly average low temperatures have also been increasing since 2013, peaking above the record average low temperature between 1980 and 2010 in July and August of 2015.
+
+```{r diff.low, echo=F, message=F, warning=F, fig.width=7, fig.height=2}
+dygraph(mdat[,4:6], group='diff') %>% 
+  dyAxis('x', drawGrid=F, axisLabelFormatter=htmlwidgets::JS(getYear), pixelsPerLabel=50, 
+         valueFormatter=htmlwidgets::JS(getMonthYear), rangePad=10, axisLabelFontSize = 12) %>% 
+  dyAxis('y', drawGrid=F, rangePad=10, pixelsPerLabel=20) %>%
+  dyShading(from='2016-03-01', to='2016-06-30') %>%
+  dyShading(from='2015-03-01', to='2015-06-30') %>%
+  dyShading(from='2014-03-01', to='2014-06-30') %>%
+  dyShading(from='2013-03-01', to='2013-06-30') %>%
+  dyShading(from='2012-03-01', to='2012-06-30') %>%
+  dyShading(from='2011-03-01', to='2011-06-30') %>%
+  dySeries(names(mdat)[5], plotter=barChart, color=pointblue.palette[2], label='Difference from historic (F)') %>%
+  dyLimit(0, color='black', strokePattern = 'solid', label='Average') %>%
+  dySeries(names(mdat)[4], strokePattern = 'dotted', color=pointblue.palette[7], strokeWidth=2, 
+           label='1980-2010 Max') %>%
+  dySeries(names(mdat)[6], strokePattern = 'dotted', color=pointblue.palette[7], strokeWidth=2, 
+           label='1980-2010 Min') %>%
+  dyHighlight(highlightCircleSize=4, hideOnMouseOut = FALSE, highlightSeriesBackgroundAlpha = 1) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, show='follow')
+```
+</br>
+
+#### Precipitation (in)
+December 2014 was the wettest month recorded since the weather station was installed, but almost every other month between January 2013 and December 2015 was dryer than the historic average.
+
+```{r diff.rain, echo=F, message=F, warning=F, fig.width=7, fig.height=2}
+dygraph(mdat[,7:9], group='diff') %>% 
+  dyAxis('x', drawGrid=F, axisLabelFormatter=htmlwidgets::JS(getYear), pixelsPerLabel=50, 
+         valueFormatter=htmlwidgets::JS(getMonthYear), rangePad=10) %>% 
+  dyAxis('y', drawGrid=F, rangePad=10, pixelsPerLabel=20) %>%
+  dyShading(from='2016-03-01', to='2016-06-30') %>%
+  dyShading(from='2015-03-01', to='2015-06-30') %>%
+  dyShading(from='2014-03-01', to='2014-06-30') %>%
+  dyShading(from='2013-03-01', to='2013-06-30') %>%
+  dyShading(from='2012-03-01', to='2012-06-30') %>%
+  dyShading(from='2011-03-01', to='2011-06-30') %>%
+  dySeries(names(mdat)[8], plotter=barChart, color=pointblue.palette[1], label='Difference from historic (in)')  %>%
+  dyLimit(0, color='black', strokePattern = 'solid', label='Average') %>%
+  dySeries(names(mdat)[7], strokePattern = 'dotted', color=pointblue.palette[7], strokeWidth=2, 
+           label='1980-2010 Max') %>%
+  dySeries(names(mdat)[9], strokePattern = 'dotted', color=pointblue.palette[7], strokeWidth=2, 
+           label='1980-2010 Min') %>%
+  dyHighlight(highlightCircleSize=4, hideOnMouseOut = FALSE, highlightSeriesBackgroundAlpha = 1) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, show='follow')
+```
+</br>
+<i>*Historic averages and extreme values taken from Half Moon Bay, 1981-2010.</i>
+</br></br>
+[Back to top](#top)
+  
+</br></br>
+<a id='drought'></a>
+
+### Drought conditions relaxing after 3.5 years
+Central Coastal California has been in a drought since spring 2013, but conditions have been improving in 2016.
+</br></br>
+
+#### Palmer Drought Severity Index (PDSI)
+The PDSI is an indicator of long-term drought that takes into account precipitation and temperatures over several months. Values less than -2 are considered to be <b><font color='`r oranges[3]`'>moderate</font></b> (-2 to -3), <b><font color='`r oranges[4]`'>severe</font></b> (-3 to -4), or <b><font color='`r oranges[5]`'>extreme drought</font></b> (-4 and below). 
+
+The PDSI for Central Coastal California was at <b><font color='`r oranges[5]`'>extreme drought</font></b> levels from November 2013 through November 2015, except during the very wet December of 2014, and only recently entered normal range in October 2016. Conditions in Northern Coastal California were never quite as dry as Central Coastal California, and recovered dramatically in December 2015, while Southern Coastal California remains in extreme drought.
+</br></br>
+
+```{r pdsi, echo=F, message=F, warning=F, fig.width=7, fig.height=2}
+## Palmer Drought Severity Index
+pdsi = read.csv('data/CA_Palmer_Drought_Severity_Index.csv')
+pdsi$date = as.Date(pdsi$date)
+pdsi = pdsi[7:nrow(pdsi),] #start with July 2010 to match other weather data
+pdsi = xts::xts(pdsi[,-which(colnames(pdsi) %in% c('date','month'))], order.by=pdsi$date)
+pdsi = pdsi[-which(is.na(pdsi$PDSI.04)),] #most recent months not filled in yet
+
+## Climate divisions within California:
+## 01: North Coast Drainage
+## 02: Sacramento Drainage
+## 03: Northeast Interior Basins
+## 04: Central Coast **TomKat**
+## 05: San Joaquin Drainage
+## 06: South Coast Drainage
+## 07: Southeast Desert Basin
+
+# pal3 = colorRampPalette(c('#ffffff',pointblue.palette[2]))
+# greens = pal3(6)
+
+
+dygraph(pdsi[,c('PDSI.01','PDSI.06','PDSI.04')], group='diff') %>% 
+  dyAxis('x', drawGrid=F, axisLabelFormatter=htmlwidgets::JS(getYear), pixelsPerLabel=50, 
+         valueFormatter=htmlwidgets::JS(getMonthYear), rangePad=10) %>% 
+  dyAxis('y', drawGrid=F, rangePad=10, independentTicks=TRUE, pixelsPerLabel=20) %>%
+  dyShading(-3,-2,axis='y',color=oranges[3]) %>% #moderate drought
+  dyShading(-4,-3,axis='y',color=oranges[4]) %>% #severe drought
+  dyShading(-20,-4,axis='y',color=oranges[5]) %>% #extreme drought
+  dyShading(2,3,axis='y',color=blues[3]) %>%
+  dyShading(3,4,axis='y',color=blues[4]) %>%
+  dyShading(4,20,axis='y',color=blues[5]) %>%
+  dySeries('PDSI.01', color=pointblue.palette[7], strokePattern='dashed', label='North Coast') %>%
+  dySeries('PDSI.04', color=pointblue.palette[7], fillGraph=F, label='Central Coast', strokeWidth=2) %>%
+  dySeries('PDSI.06', color=pointblue.palette[7], strokePattern='dotted', label='South Coast') %>%
+  dyLimit(0, color='black', strokePattern = 'solid') %>%
+  # dyLimit(-6, label='Extreme Drought', color=oranges[4]) %>%
+  dyHighlight(highlightCircleSize=4, hideOnMouseOut = FALSE, highlightSeriesBackgroundAlpha = 1) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, show='follow')
+```
+</br></br>
+
+
+#### Palmer Z Index (PZI)
+The PZI measures short-term drought on a monthly scale, and can better reflect recent soil moisture conditions. Values less than -1.25 are considered to be <b><font color='`r oranges[3]`'>moderate</font></b> (-1.25 to -2), <b><font color='`r oranges[4]`'>severe</font></b> (-2 to -2.75), or <b><font color='`r oranges[5]`'>extreme drought</font></b> (-2.75 and below). 
+
+The impact of big storms can be more readily seen in this index, such as the very wet December 2014 and more wet weather in October 2016 (not yet shown in the local TomKat weather data). Northern and Central Coastal California have had more frequent short-term relief from drought conditions through such storms than Southern Coastal California.  
+</br></br>
+
+```{r pzi, echo=F, message=F, warning=F, fig.width=7, fig.height=2}
+## Palmer Z Index
+pzi = read.csv('data/CA_Palmer_Z_Index.csv')
+pzi$date = as.Date(pzi$date)
+pzi = pzi[7:nrow(pzi),]
+pzi = xts::xts(pzi[,-which(colnames(pzi) %in% c('date','month'))], order.by=pzi$date)
+pzi = pzi[-which(is.na(pzi$PZI.04)),]
+
+dygraph(pzi[,c('PZI.01','PZI.06','PZI.04')], group='diff') %>% 
+  dyAxis('x', drawGrid=F, axisLabelFormatter=htmlwidgets::JS(getYear), pixelsPerLabel=50, 
+         valueFormatter=htmlwidgets::JS(getMonthYear), rangePad=10) %>% 
+  dyAxis('y', drawGrid=F, rangePad=10, independentTicks=TRUE, pixelsPerLabel=20) %>%
+  dyShading(-2,-1.25,axis='y',color=oranges[3]) %>%
+  dyShading(-2.75,-2,axis='y',color=oranges[4]) %>%
+  dyShading(-8,-2.75,axis='y',color=oranges[5]) %>%
+  dyShading(1,2.5,axis='y',color=blues[3]) %>%
+  dyShading(2.5,3.5,axis='y',color=blues[4]) %>%
+  dyShading(3.5,10,axis='y',color=blues[5]) %>%
+  dySeries('PZI.01', color=pointblue.palette[7], strokePattern='dashed', label='North Coast') %>%
+  dySeries('PZI.04', color=pointblue.palette[7], fillGraph=F, label='Central Coast', strokeWidth=2) %>%
+  dySeries('PZI.06', color=pointblue.palette[7], strokePattern='dotted', label='South Coast') %>%
+  dyLimit(0, color='black', strokePattern = 'solid') %>%
+  dyHighlight(highlightCircleSize=4, hideOnMouseOut = FALSE, highlightSeriesBackgroundAlpha = 1) %>%
+  dyLegend(labelsSeparateLines=T, showZeroValues = T, show='follow')
+
+```
+</br></br>
+
+More information about these drought indices are available from the [National Centers for Environmental Information](http://www.ncdc.noaa.gov/temp-and-precip/drought/historical-palmers/overview).
+
+
+[Back to top](#top)
+</br></br>
+<a id="table"></a>
+
+### Monthly weather data summary  
+</br>
+<i>Sort by any column to find warmest, coldest, or wettest months recorded at the TomKat weather station.</i>
+</br>
+```{r datatable, echo=F, message=F, warning=F, fig.width=7, fig.height=5}
+
+## drought indices
+pdsi = read.csv('data/CA_Palmer_Drought_Severity_Index.csv')
+pdsi$date = as.Date(pdsi$date)
+
+pzi = read.csv('data/CA_Palmer_Z_Index.csv')
+pzi$date = as.Date(pzi$date)
+
+drought = merge(pdsi[,c('date','PDSI.04')], pzi[,c('date','PZI.04')], by='date', all.x=T, all.y=T, sort=F)
+
+## TomKat monthly weather stats
+mdat = read.csv('data/TK_weather_monthly_stats.csv')
+mdat$date = as.Date(mdat$date)
+mdat = merge(mdat, drought, by='date', all.x=T, sort=F)
+
+show = mdat[, c('date','max.temp', 'min.temp', 'min.rain', 'PDSI.04', 'PZI.04')]
+show = show[order(show$date, decreasing=T),]
+show$date = format(show$date, '%b %Y')
+show[,c(2:3)] = round(show[,c(2:3)], digits=1)
+
+DT::datatable(show, rownames=F, escape=F, filter='bottom',
+          colnames = c('Month','Mean<br>high (F)','Mean<br>low (F)','Precip<br>(in)', 'PDSI', 'PZI'),
+          options=list(
+            autoWidth = F,
+            columnDefs = list(list(className = 'dt-center', targets = c(1:5))),
+            lengthMenu = list(c(10, 25, 50, -1),c(10,25,50,'All')),
+            dom = 'T<"clear">lrtip'))
+```  
+[Back to top](#top)
+
+-------------
+
+### About this page
+
+This interactive web page was produced using [RStudio](https://www.rstudio.com) with the packages [dygraphs](https://rstudio.github.io/dygraphs/) for time series graphs and [DT](https://rstudio.github.io/DT/) for data tables. RStudio is a free and open-source software for programming in [R](https://www.R-project.org/), a programming language for statistical computing and graphics. The code used to produce this web page is available online: XXX.
+
+
+### For more information
+
+Please contact:  
+[Nat Seavy, Ph.D.](mailto:nseavy@pointblue.org)  
+Research Director  
+Pacific Coast and Central Valley Group  
+Point Blue Conservation Science  
+
+
+-------------
