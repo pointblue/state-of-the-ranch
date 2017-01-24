@@ -165,32 +165,32 @@ dat2 = dat.orig
 
 ## create HTML table for popups, giving actual data
 dat2$title = paste0('<b>', dat2$Point, '</b></br>')
-dat2$table.header = '<tr><td></td><td align="right">Concentration (%)</td></td><td align="right">Percentile</td><td align="right"></tr>'
+dat2$table.header = '<tr><td></td><td align="right">Value</td></td><td align="right">Percentile</td><td align="right"></tr>'
 dat2$table.row1 = paste0('<tr><td>Ca:</td><td align="right">',  
-                         dat2$Calcium,'</td><td align="right">',
+                         dat2$Calcium,' cmol(+)/kg </td><td align="right">',
                          round(dat2$Ca.perc*100, digits=0),'</td></tr>')
 dat2$table.row2 = paste0('<tr><td>Mg:</td><td align="right">',
-                         dat2$Magnesium,'</td><td align="right">',
+                         dat2$Magnesium,' cmol(+)/kg </td><td align="right">',
                          round(dat2$Mg.perc*100, digits=0),'</td></tr>')
 dat2$table.row3 = paste0('<tr><td>K:</td><td align="right">',
-                         dat2$Potassium,'</td><td align="right">',
+                         dat2$Potassium,' cmol(+)/kg </td><td align="right">',
                          round(dat2$K.perc*100, digits=0),'</td></tr>')
 dat2$table.row4 = paste0('<tr><td>Na:</td><td align="right">',
-                         dat2$Sodium,'</td><td align="right">',
+                         dat2$Sodium,' cmol(+)/kg </td><td align="right">',
                          round(dat2$Na.perc*100, digits=0),'</td></tr>')
 dat2$table.row5 = paste0('<tr><td>N:</td><td align="right">',
-                         dat2$Total.Nitrogen,'</td><td align="right">',
+                         dat2$Total.Nitrogen,' % </td><td align="right">',
                          round(dat2$N.perc*100, digits=0),'</td></tr>')
 dat2$table.row6 = paste0('<tr><td>pH:</td><td align="right">',
                          dat2$pH,'</td><td align="right">',
                          round(dat2$pH.perc*100, digits=0),'</td></tr>')
 
-dat2$labelCa = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row1, '</table>')
-dat2$labelMg = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row2, '</table>')
-dat2$labelK = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row3, '</table>')
-dat2$labelNa = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row4, '</table>')
-dat2$labelN = paste0(dat2$title, '<table>', dat2$table.header, dat2$table.row5, '</table>')
-dat2$labelpH = paste0(dat2$title, '<table>', '<tr><td></td><td align="right">Value</td></td><td align="right">Percentile</td><td align="right"></tr>', dat2$table.row6, '</table>')
+dat2$labelCa = paste0(dat2$title, '<table width=150>', dat2$table.header, dat2$table.row1, '</table>')
+dat2$labelMg = paste0(dat2$title, '<table width=150>', dat2$table.header, dat2$table.row2, '</table>')
+dat2$labelK = paste0(dat2$title, '<table width=150>', dat2$table.header, dat2$table.row3, '</table>')
+dat2$labelNa = paste0(dat2$title, '<table width=150>', dat2$table.header, dat2$table.row4, '</table>')
+dat2$labelN = paste0(dat2$title, '<table width=150>', dat2$table.header, dat2$table.row5, '</table>')
+dat2$labelpH = paste0(dat2$title, '<table width=150>', dat2$table.header, dat2$table.row6, '</table>')
 
 ## match soil data to point count coordinates
 coords = rgdal::readOGR('GIS', 'TOKA_point_count_grid', verbose=F) #NAD83 UTM Zone 10N
